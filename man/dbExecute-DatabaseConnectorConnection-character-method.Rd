@@ -4,7 +4,7 @@
 \alias{dbExecute,DatabaseConnectorConnection,character-method}
 \title{Change database state}
 \usage{
-\S4method{dbExecute}{DatabaseConnectorConnection,character}(conn, statement, translate = TRUE, ...)
+\S4method{dbExecute}{DatabaseConnectorConnection,character}(conn, statement, translate = FALSE, ...)
 }
 \arguments{
 \item{conn}{A \linkS4class{DBIConnection} object, as returned by

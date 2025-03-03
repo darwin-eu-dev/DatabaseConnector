@@ -1,6 +1,6 @@
 # @file Connect.R
 #
-# Copyright 2023 Observational Health Data Sciences and Informatics
+# Copyright 2025 Observational Health Data Sciences and Informatics
 #
 # This file is part of DatabaseConnector
 #
@@ -19,16 +19,21 @@
 checkIfDbmsIsSupported <- function(dbms) {
   supportedDbmss <- c(
     "oracle",
+    "hive",
     "postgresql",
     "redshift",
     "sql server",
+    "pdw",
+    "netezza",
+    "impala",
     "bigquery",
     "sqlite",
     "sqlite extended",
     "spark",
     "snowflake",
     "synapse",
-    "duckdb"
+    "duckdb",
+    "iris"
   )
   deprecated <- c(
     "hive",
@@ -308,7 +313,7 @@ connectUsingJdbc <- function(connectionDetails) {
   connectionDetails$pathToDriver <- path.expand(connectionDetails$pathToDriver)
   checkPathToDriver(connectionDetails$pathToDriver, dbms)
 
-  if (dbms == "sql server") {
+  if (dbms == "sql server" || dbms == "synapse" || dbms == "pdw") {
     return(connectSqlServer(connectionDetails))
   } else if (dbms == "oracle") {
     return(connectOracle(connectionDetails))
@@ -316,12 +321,20 @@ connectUsingJdbc <- function(connectionDetails) {
     return(connectPostgreSql(connectionDetails))
   } else if (dbms == "redshift") {
     return(connectRedShift(connectionDetails))
+  } else if (dbms == "netezza") {
+    return(connectNetezza(connectionDetails))
+  } else if (dbms == "impala") {
+    return(connectImpala(connectionDetails))
+  } else if (dbms == "hive") {
+    return(connectHive(connectionDetails))
   } else if (dbms == "bigquery") {
     return(connectBigQuery(connectionDetails))
   } else if (dbms == "spark") {
     return(connectSpark(connectionDetails))
   } else if (dbms == "snowflake") {
     return(connectSnowflake(connectionDetails))
+  } else if (dbms == "iris") {
+    return(connectIris(connectionDetails))
   } else {
     abort("Something went wrong when trying to connect to ", dbms)
   }
@@ -534,6 +547,94 @@ connectRedShift <- function(connectionDetails) {
   return(connection)
 }
 
+connectNetezza <- function(connectionDetails) {
+  inform("Connecting using Netezza driver")
+  jarPath <- findPathToJar("^nzjdbc\\.jar$", connectionDetails$pathToDriver)
+  driver <- getJbcDriverSingleton("org.netezza.Driver", jarPath)
+  if (is.null(connectionDetails$connectionString()) || connectionDetails$connectionString() == "") {
+    if (!grepl("/", connectionDetails$server())) {
+      abort("Error: database name not included in server string but is required for Redshift Please specify server as <host>/<database>")
+    }
+    parts <- unlist(strsplit(connectionDetails$server(), "/"))
+    host <- parts[1]
+    database <- parts[2]
+    if (is.null(connectionDetails$port())) {
+      port <- "5480"
+    } else {
+      port <- connectionDetails$port()
+    }
+    connectionString <- paste0("jdbc:netezza://", host, ":", port, "/", database)
+    if (!is.null(connectionDetails$extraSettings)) {
+      connectionString <- paste(connectionString, connectionDetails$extraSettings, sep = "?")
+    }
+  } else {
+    connectionString <- connectionDetails$connectionString()
+  }
+  if (is.null(connectionDetails$user())) {
+    connection <- connectUsingJdbcDriver(driver, connectionString, dbms = connectionDetails$dbms)
+  } else {
+    connection <- connectUsingJdbcDriver(driver,
+                                         connectionString,
+                                         user = connectionDetails$user(),
+                                         password = connectionDetails$password(),
+                                         dbms = connectionDetails$dbms
+    )
+  }
+  return(connection)
+}
+
+connectImpala <- function(connectionDetails) {
+  inform("Connecting using Impala driver")
+  jarPath <- findPathToJar("^ImpalaJDBC42\\.jar$", connectionDetails$pathToDriver)
+  driver <- getJbcDriverSingleton("com.cloudera.impala.jdbc.Driver", jarPath)
+  if (is.null(connectionDetails$connectionString()) || connectionDetails$connectionString() == "") {
+    if (is.null(connectionDetails$port())) {
+      port <- "21050"
+    } else {
+      port <- connectionDetails$port()
+    }
+    connectionString <- paste0("jdbc:impala://", connectionDetails$server(), ":", port)
+    if (!is.null(connectionDetails$extraSettings)) {
+      connectionString <- paste(connectionString, connectionDetails$extraSettings, sep = ";")
+    }
+  } else {
+    connectionString <- connectionDetails$connectionString()
+  }
+  if (is.null(connectionDetails$user())) {
+    connection <- connectUsingJdbcDriver(driver, connectionString, dbms = connectionDetails$dbms)
+  } else {
+    connection <- connectUsingJdbcDriver(driver,
+                                         connectionString,
+                                         user = connectionDetails$user(),
+                                         password = connectionDetails$password(),
+                                         dbms = connectionDetails$dbms
+    )
+  }
+  return(connection)
+}
+
+connectHive <- function(connectionDetails) {
+  inform("Connecting using Hive driver")
+  jarPath <- findPathToJar("^hive-jdbc-([.0-9]+-)*standalone\\.jar$", connectionDetails$pathToDriver)
+  driver <- getJbcDriverSingleton("org.apache.hive.jdbc.HiveDriver", jarPath)
+  
+  if (is.null(connectionDetails$connectionString()) || connectionDetails$connectionString() == "") {
+    connectionString <- paste0("jdbc:hive2://", connectionDetails$server(), ":", connectionDetails$port(), "/")
+    if (!is.null(connectionDetails$extraSettings)) {
+      connectionString <- paste(connectionString, connectionDetails$extraSettings, sep = ";")
+    }
+  } else {
+    connectionString <- connectionDetails$connectionString()
+  }
+  connection <- connectUsingJdbcDriver(driver,
+                                       connectionString,
+                                       user = connectionDetails$user(),
+                                       password = connectionDetails$password(),
+                                       dbms = connectionDetails$dbms
+  )
+  return(connection)
+}
+
 connectBigQuery <- function(connectionDetails) {
   inform("Connecting using BigQuery driver")
   files <- list.files(path = connectionDetails$pathToDriver, full.names = TRUE)
@@ -646,6 +747,36 @@ connectSqlite <- function(connectionDetails) {
       extended_types = (connectionDetails$dbms == "sqlite extended")
     )
   )
+  return(connection)
+}
+
+connectIris <- function(connectionDetails) {
+  inform("Connecting using InterSystems IRIS driver")
+  jarPath <- findPathToJar("^intersystems-jdbc-.*\\.jar$", connectionDetails$pathToDriver)
+  driver <- getJbcDriverSingleton("com.intersystems.jdbc.IRISDriver", jarPath)
+  if (is.null(connectionDetails$connectionString()) || connectionDetails$connectionString() == "") {
+    if (is.null(connectionDetails$port())) {
+      port <- "1972"
+    } else {
+      port <- connectionDetails$port()
+    }
+    connectionString <- paste0("jdbc:IRIS://", connectionDetails$server(), ":", port, "/USER")  # use a full connection string for nondefault database
+    if (!is.null(connectionDetails$extraSettings)) {
+      connectionString <- paste(connectionString, connectionDetails$extraSettings, sep = ";")
+    }
+  } else {
+    connectionString <- connectionDetails$connectionString()
+  }
+  if (is.null(connectionDetails$user())) {
+    connection <- connectUsingJdbcDriver(driver, connectionString, dbms = connectionDetails$dbms)
+  } else {
+    connection <- connectUsingJdbcDriver(driver,
+      connectionString,
+      user = connectionDetails$user(),
+      password = connectionDetails$password(),
+      dbms = connectionDetails$dbms
+    )
+  }
   return(connection)
 }
 

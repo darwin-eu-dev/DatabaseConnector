@@ -17,7 +17,7 @@ renderTranslateQuerySql(
 }
 \arguments{
 \item{connection}{The connection to the database server created using either
-\code{\link[=connect]{connect()}} or \code{\link[=dbConnect]{dbConnect()}}.}
+\code{\link[=connect]{connect()}} or \code{\link[DBI:dbConnect]{DBI::dbConnect()}}.}
 
 \item{sql}{The SQL to be send.}
 
@@ -37,8 +37,6 @@ can be created.}
 64-bit integers will be represented using \code{bit64::integer64}.}
 
 \item{...}{Parameters that will be used to render the SQL.}
-
-\item{oracleTempSchema}{DEPRECATED: use \code{tempEmulationSchema} instead.}
 }
 \value{
 A data frame.

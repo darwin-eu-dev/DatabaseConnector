@@ -1,6 +1,6 @@
 # @file InsertTable.R
 #
-# Copyright 2023 Observational Health Data Sciences and Informatics
+# Copyright 2025 Observational Health Data Sciences and Informatics
 #
 # This file is part of DatabaseConnector
 #
@@ -127,6 +127,13 @@ validateInt64Insert <- function() {
 #' "some_access_key_id", "AWS_SECRET_ACCESS_KEY" = "some_secret_access_key", "AWS_DEFAULT_REGION" =
 #' "some_aws_region", "AWS_BUCKET_NAME" = "some_bucket_name", "AWS_OBJECT_KEY" = "some_object_key",
 #' "AWS_SSE_TYPE" = "server_side_encryption_type").
+#'
+#' Spark (DataBricks): The MPP bulk loading relies upon the AzureStor library
+#' to test a connection to an Azure ADLS Gen2 storage container using Azure credentials. 
+#' Credentials are configured directly into the System Environment using the 
+#' following keys: Sys.setenv("AZR_STORAGE_ACCOUNT" =
+#' "some_azure_storage_account", "AZR_ACCOUNT_KEY" = "some_secret_account_key", "AZR_CONTAINER_NAME" =
+#' "some_container_name").
 #'
 #' PDW: The MPP bulk loading relies upon the client
 #' having a Windows OS and the DWLoader exe installed, and the following permissions granted: --Grant
@@ -280,16 +287,10 @@ insertTable.default <- function(connection,
     )
   }
   
-  if (createTable && !useCtasHack) {
-    # temporary translation for boolean types. move this to sql render.
-    # if (dbms == "sql server") {
-    #   print("custom translation")
-    #   sqlTableDefinition <- gsub("BOOLEAN", "BIT", sqlTableDefinition)
-    #   print(sqlTableDefinition)
-    # }
+  if (createTable && !useCtasHack && !(bulkLoad && dbms == "hive")) {
     
     sql <- paste("CREATE TABLE ", sqlTableName, " (", sqlTableDefinition, ");", sep = "")
-    print(sql)
+ 
     renderTranslateExecuteSql(
       connection = connection,
       sql = sql,
@@ -307,12 +308,20 @@ insertTable.default <- function(connection,
     inform("Attempting to use bulk loading...")
     if (dbms == "redshift") {
       bulkLoadRedshift(connection, sqlTableName, data)
+    } else if (dbms == "pdw") {
+      bulkLoadPdw(connection, sqlTableName, sqlDataTypes, data)
+    } else if (dbms == "hive") {
+      bulkLoadHive(connection, sqlTableName, sqlFieldNames, data)
     } else if (dbms == "postgresql") {
       bulkLoadPostgres(connection, sqlTableName, sqlFieldNames, sqlDataTypes, data)
+    } else if (dbms == "spark") {
+      bulkLoadSpark(connection, sqlTableName, data)
     }
   } else if (useCtasHack) {
     # Inserting using CTAS hack ----------------------------------------------------------------
     ctasHack(connection, sqlTableName, tempTable, sqlFieldNames, sqlDataTypes, data, progressBar, tempEmulationSchema)
+  } else if (dbms == "spark") {
+    multiValuesInsert(connection, sqlTableName, sqlFieldNames, sqlDataTypes, data, progressBar, tempEmulationSchema)
   } else {
     # Inserting using SQL inserts --------------------------------------------------------------
     logTrace(sprintf("Inserting %d rows into table '%s'", nrow(data), sqlTableName))

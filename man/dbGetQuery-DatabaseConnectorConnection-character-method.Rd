@@ -4,7 +4,7 @@
 \alias{dbGetQuery,DatabaseConnectorConnection,character-method}
 \title{Retrieve results from a query}
 \usage{
-\S4method{dbGetQuery}{DatabaseConnectorConnection,character}(conn, statement, translate = TRUE, ...)
+\S4method{dbGetQuery}{DatabaseConnectorConnection,character}(conn, statement, translate = FALSE, ...)
 }
 \arguments{
 \item{conn}{A \linkS4class{DBIConnection} object, as returned by
